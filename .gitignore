@@ -1,0 +1,6 @@
+/pkg/
+/Gemfile.lock
+/.bundle/
+/vendor/
+*.gem
+/ood_core/

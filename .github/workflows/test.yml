@@ -1,0 +1,48 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ['2.7', '3.0', '3.1', '3.2', '3.3', '3.4']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+      - run: bundle exec rake test
+
+  # Replays every recording through Open OnDemand's own adapters, from
+  # ood_core's master branch, with no scheduler running.
+  ood_core:
+    runs-on: ubuntu-latest
+    # ood_core master's Kubernetes adapter can't submit in a plain Ruby
+    # process (missing require 'erb', see the minitest port PR). Remove
+    # this once that fix is merged.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: OSC/ood_core
+          path: ood_core
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: ood_core
+      - run: bundle exec rake test:ood_core
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/ood_core/Gemfile
+          OOD_CORE: ${{ github.workspace }}/ood_core

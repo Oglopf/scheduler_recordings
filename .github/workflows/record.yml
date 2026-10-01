@@ -1,0 +1,82 @@
+name: record
+
+# Records Open OnDemand's Kubernetes adapter against kind clusters, one per
+# Kubernetes version, and opens a pull request with the new recordings.
+# Run it from the Actions tab when a new Kubernetes or ood_core version
+# comes out.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ood_core_ref:
+        description: ood_core branch, tag or commit to record with
+        default: master
+      scenarios:
+        description: Comma-separated scenarios to record (blank for all)
+        default: ''
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  kubernetes:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # From the kind v0.33.0 release notes. Pin by digest, as kind recommends.
+        node:
+          - kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
+          - kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
+          - kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0
+          - kindest/node:v1.34.11@sha256:44e222ee2132dab25ff87301682f89eb82c7880ea3a1bf543bfe9708fd08d67d
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: OSC/ood_core
+          ref: ${{ inputs.ood_core_ref }}
+          path: ood_core
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: ood_core
+      - uses: helm/kind-action@v1
+        with:
+          version: v0.33.0
+          node_image: ${{ matrix.node }}
+          cluster_name: recordings
+      - name: Record
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/ood_core/Gemfile
+        run: |
+          only=()
+          if [ -n "${{ inputs.scenarios }}" ]; then only=(--only "${{ inputs.scenarios }}"); fi
+          bundle exec ruby -I ood_core/lib exe/scheduler-recordings record kubernetes \
+            --kubeconfig "$HOME/.kube/config" "${only[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kubernetes-${{ strategy.job-index }}
+          path: recordings/kubernetes
+
+  pull-request:
+    needs: kubernetes
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: kubernetes-*
+          path: recordings/kubernetes
+          merge-multiple: true
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: recordings/kubernetes
+          commit-message: Record Kubernetes with ood_core ${{ inputs.ood_core_ref }}
+          title: Record Kubernetes with ood_core ${{ inputs.ood_core_ref }}
+          body: |
+            Recorded by the `record` workflow against kind, with ood_core `${{ inputs.ood_core_ref }}`.
+            Diffs against existing recordings are real changes in what the API server returns or what the adapter sends.

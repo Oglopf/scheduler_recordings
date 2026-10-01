@@ -1,0 +1,79 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Record Open OnDemand adapters against a real scheduler, or list recordings.
+#
+#   scheduler-recordings record kubernetes --kubeconfig ~/.kube/config [--only running_pod,error_pod]
+#   scheduler-recordings list [kubernetes]
+#
+# Recording needs ood_core loadable (installed, or -I path/to/ood_core/lib).
+
+require 'optparse'
+$LOAD_PATH.unshift(File.expand_path('../lib', __dir__))
+require 'scheduler_recordings'
+
+def usage!(parser, message = nil)
+  warn(message) if message
+  warn(parser)
+  exit(2)
+end
+
+options = {
+  out: File.expand_path('../recordings', __dir__),
+  kubeconfig: ENV.fetch('KUBECONFIG', File.join(Dir.home, '.kube', 'config')),
+  timeout: 120
+}
+parser = OptionParser.new do |opts|
+  opts.banner = "usage: scheduler-recordings record SCHEDULER [options]\n" \
+                '       scheduler-recordings list [SCHEDULER]'
+  opts.on('--out DIR', 'where to write recordings (default: this checkout\'s recordings/)') { |v| options[:out] = v }
+  opts.on('--only NAMES', Array, 'record only these scenarios') { |v| options[:only] = v }
+  opts.on('--timeout SECONDS', Integer, 'how long to wait for each state (default 120)') { |v| options[:timeout] = v }
+  opts.on('--kubeconfig PATH', 'kubernetes: cluster to record against') { |v| options[:kubeconfig] = v }
+  opts.on('--kubectl PATH', 'kubernetes: kubectl to run (default: the one on PATH)') { |v| options[:kubectl] = v }
+  opts.on('--image IMAGE', 'kubernetes: image for test pods (default busybox:1.36.1)') { |v| options[:image] = v }
+end
+
+begin
+  parser.parse!
+rescue OptionParser::ParseError => e
+  usage!(parser, e.message)
+end
+
+command, scheduler = ARGV
+case command
+when 'list'
+  schedulers = scheduler ? [scheduler] : SchedulerRecordings.schedulers
+  schedulers.each do |name|
+    SchedulerRecordings.versions(name).each do |version|
+      puts "#{name}/#{version}: #{SchedulerRecordings.scenarios(name, version).join(' ')}"
+    end
+  end
+when 'record'
+  require 'scheduler_recordings/scenario'
+  backend = case scheduler
+            when 'kubernetes'
+              require 'scheduler_recordings/backends/kubernetes'
+              require 'scheduler_recordings/scenarios/kubernetes'
+              backend_options = { kubeconfig: options[:kubeconfig], timeout: options[:timeout] }
+              backend_options[:kubectl] = options[:kubectl] if options[:kubectl]
+              backend_options[:image] = options[:image] if options[:image]
+              SchedulerRecordings::Backends::Kubernetes.new(**backend_options)
+            else
+              usage!(parser, "can't record #{scheduler.inspect} yet; known: kubernetes")
+            end
+
+  scenarios = SchedulerRecordings::Scenario.all(scheduler)
+  if options[:only]
+    unknown = options[:only] - scenarios.map(&:name)
+    usage!(parser, "unknown scenarios: #{unknown.join(', ')}") unless unknown.empty?
+    scenarios = scenarios.select { |scenario| options[:only].include?(scenario.name) }
+  end
+
+  runner = SchedulerRecordings::Runner.new(backend, out: options[:out])
+  written, failed = runner.run(scenarios)
+  warn("#{written.length} recorded, #{failed.length} failed#{failed.empty? ? '' : ": #{failed.join(', ')}"}")
+  exit(failed.empty? ? 0 : 1)
+else
+  usage!(parser)
+end
