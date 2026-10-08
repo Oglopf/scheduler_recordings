@@ -37,7 +37,7 @@ new version adds coverage without changing the test.
 | Scheduler | Versions | Scenarios |
 |---|---|---|
 | Kubernetes | v1.31.2 (k3s); kind v1.34–v1.37 via the `record` workflow | running_pod, running_pod_not_ready, queued_pod, unschedulable_pod, completed_pod, error_pod, crash_loop_pod, image_error_pod, several_pods, delete_pod, not_found, empty_namespace, invalid_submit |
-| Flux | scenarios ready; recordings not yet committed | running_job, held_job, dependent_job, released_job, completed_job, failed_job, timeout_job, canceled_job, several_jobs, not_found, no_jobs, invalid_submit |
+| Flux | v0.89.0 (fluxrm/flux-sched container) | running_job, held_job, dependent_job, released_job, completed_job, failed_job, timeout_job, canceled_job, several_jobs, not_found, no_jobs, invalid_submit |
 
 The Kubernetes scenario names follow the hand-captured fixtures in ood_core's
 `spec/fixtures/output/k8s`, so each recording can check or replace one.
