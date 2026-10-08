@@ -16,6 +16,10 @@ begin
   require 'ood_core'
   require 'ood_core/job/adapters/flux'
 rescue LoadError => e
+  # Pointed at an ood_core on purpose (OOD_CORE, as CI does): a load failure
+  # is a broken setup, not a reason to report 0 runs as a pass.
+  raise if ENV['OOD_CORE']
+
   warn("skipping flux replay tests: #{e.message}")
   return
 end

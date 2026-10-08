@@ -15,6 +15,10 @@ require 'scheduler_recordings/backends/kubernetes'
 begin
   require 'ood_core'
 rescue LoadError => e
+  # Pointed at an ood_core on purpose (OOD_CORE, as CI does): a load failure
+  # is a broken setup, not a reason to report 0 runs as a pass.
+  raise if ENV['OOD_CORE']
+
   warn("skipping ood_core replay tests: #{e.message}")
   return
 end
