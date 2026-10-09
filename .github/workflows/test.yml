@@ -27,10 +27,6 @@ jobs:
   # ood_core's master branch, with no scheduler running.
   ood_core:
     runs-on: ubuntu-latest
-    # ood_core master's Kubernetes adapter can't submit in a plain Ruby
-    # process (missing require 'erb', see the minitest port PR). Remove
-    # this once that fix is merged.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4

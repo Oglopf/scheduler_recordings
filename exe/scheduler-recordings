@@ -4,6 +4,7 @@
 # Record Open OnDemand adapters against a real scheduler, or list recordings.
 #
 #   scheduler-recordings record kubernetes --kubeconfig ~/.kube/config [--only running_pod,error_pod]
+#   scheduler-recordings record flux [--flux /usr/bin/flux] [--only running_job,failed_job]
 #   scheduler-recordings list [kubernetes]
 #
 # Recording needs ood_core loadable (installed, or -I path/to/ood_core/lib).
@@ -32,6 +33,7 @@ parser = OptionParser.new do |opts|
   opts.on('--kubeconfig PATH', 'kubernetes: cluster to record against') { |v| options[:kubeconfig] = v }
   opts.on('--kubectl PATH', 'kubernetes: kubectl to run (default: the one on PATH)') { |v| options[:kubectl] = v }
   opts.on('--image IMAGE', 'kubernetes: image for test pods (default busybox:1.36.1)') { |v| options[:image] = v }
+  opts.on('--flux PATH', 'flux: flux command to run (default: the one on PATH)') { |v| options[:flux] = v }
 end
 
 begin
@@ -59,8 +61,14 @@ when 'record'
               backend_options[:kubectl] = options[:kubectl] if options[:kubectl]
               backend_options[:image] = options[:image] if options[:image]
               SchedulerRecordings::Backends::Kubernetes.new(**backend_options)
+            when 'flux'
+              require 'scheduler_recordings/backends/flux'
+              require 'scheduler_recordings/scenarios/flux'
+              backend_options = { timeout: options[:timeout] }
+              backend_options[:flux] = options[:flux] if options[:flux]
+              SchedulerRecordings::Backends::Flux.new(**backend_options)
             else
-              usage!(parser, "can't record #{scheduler.inspect} yet; known: kubernetes")
+              usage!(parser, "can't record #{scheduler.inspect} yet; known: kubernetes, flux")
             end
 
   scenarios = SchedulerRecordings::Scenario.all(scheduler)

@@ -44,7 +44,7 @@ class RecordingsTest < Minitest::Test
 
   def test_recordings_do_not_leak_the_recording_machine
     RECORDINGS.each do |path|
-      text = File.read(path)
+      text = File.read(path, encoding: 'UTF-8')
       refute_match(%r{/etc/rancher|/home/runner|/root/|\.kube/config}, text, path)
     end
   end

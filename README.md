@@ -37,6 +37,7 @@ new version adds coverage without changing the test.
 | Scheduler | Versions | Scenarios |
 |---|---|---|
 | Kubernetes | v1.31.2 (k3s); kind v1.34–v1.37 via the `record` workflow | running_pod, running_pod_not_ready, queued_pod, unschedulable_pod, completed_pod, error_pod, crash_loop_pod, image_error_pod, several_pods, delete_pod, not_found, empty_namespace, invalid_submit |
+| Flux | v0.89.0 (fluxrm/flux-sched container) | running_job, held_job, dependent_job, released_job, completed_job, failed_job, timeout_job, canceled_job, several_jobs, not_found, no_jobs, invalid_submit |
 
 The Kubernetes scenario names follow the hand-captured fixtures in ood_core's
 `spec/fixtures/output/k8s`, so each recording can check or replace one.
@@ -81,7 +82,7 @@ How replay matches calls:
 
 Things that differ between machines are stored as `{{placeholders}}` and
 listed in the header's `vars`. For Kubernetes those are `kubectl` and
-`kubeconfig`; pass your test's values as keywords. Leaving one out is an
+`kubeconfig`; for Flux, `flux`. Pass your test's values as keywords. Leaving one out is an
 error before anything runs.
 
 ### What a recording knows
@@ -95,7 +96,11 @@ The header of each recording has:
   `ood` (uid and gid 1000), whoever runs the recorder, so recordings from
   different machines can be compared.
   `SchedulerRecordings::Backends::Kubernetes.pin_identity(adapter.batch, recording.header['identity'])`
-  makes a replaying adapter act as that user too.
+  makes a replaying adapter act as that user too. Flux reports the real
+  submitting user, so Flux recordings are made as whoever runs the recorder;
+  stub `Etc.getpwuid` with
+  `SchedulerRecordings::Backends::Flux.account(recording.header['identity'])`
+  when replaying (see `test/ood_core/flux_test.rb`).
 - `facts`: what the scenario checked directly against the scheduler, without
   the adapter: the job ID, the pod's phase, whether it was ready. Assert the
   adapter agrees with these.
@@ -117,6 +122,7 @@ Recording runs ood_core's adapter, so ood_core has to be loadable:
 ```sh
 ruby -I ../ood_core/lib exe/scheduler-recordings record kubernetes --kubeconfig ~/.kube/config
 ruby -I ../ood_core/lib exe/scheduler-recordings record kubernetes --only running_pod,error_pod
+ruby -I ../ood_core/lib exe/scheduler-recordings record flux            # from a shell inside `flux start`
 ```
 
 Recordings go to `recordings/<scheduler>/<version>/<scenario>.jsonl`
@@ -128,6 +134,13 @@ kubeconfig reaches. Between scenarios it deletes only the pods, services,
 secrets and configmaps labelled `app.kubernetes.io/managed-by=open-ondemand`
 in that namespace. Test pods use `busybox:1.36.1` (`--image` to change it)
 and ask for 100m CPU and 64Mi memory.
+
+The Flux recorder talks to whatever instance the shell it runs in can reach,
+so run it inside `flux start` (or with `FLUX_URI` set). The version is
+flux-core's, without the git suffix (`0.89.0-124-g11c9d4c0f` is recorded as
+`v0.89.0`). Between scenarios it cancels every active job of the user running
+it, so use a test instance: `fluxrm/flux-sched` in a container works. Jobs
+run in `/tmp` so their output files stay out of your checkout.
 
 Only calls inside a scenario's `record` blocks are kept. The polling a
 scenario does while it waits for a pod to start isn't recorded, and neither
@@ -173,8 +186,11 @@ OOD_CORE=../ood_core bundle exec rake test:ood_core # replays every recording th
 
 ## Known limits
 
-- **Kubernetes only so far.** PBS Pro (OpenPBS in a container) is next.
+- **Kubernetes and Flux so far.** PBS Pro (OpenPBS in a container) is next.
+  Flux needs an ood_core with the flux adapter.
 - **ood_core's Kubernetes adapter can't submit in a plain Ruby process**
   on ood_core 0.31.1 and master as of October 2026: `batch.rb` uses `ERB` and
   `Array.wrap`, and `helper.rb` uses `Shellwords`, without requiring them.
-  Recording needs those fixed in the ood_core you record with.
+  Recording needs those fixed in the ood_core you record with. Replay
+  skips the two Kubernetes submit tests, naming the bug, until ood_core
+  requires `erb`.

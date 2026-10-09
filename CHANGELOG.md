@@ -8,3 +8,4 @@
 - Replay through `Player` and the `SchedulerRecordings::Minitest` helpers.
 - Kubernetes backend and 13 scenarios, recorded against Kubernetes v1.31.2.
 - `record` workflow for kind at Kubernetes v1.34 through v1.37.
+- Flux backend and 12 scenarios, for ood_core's flux adapter.
