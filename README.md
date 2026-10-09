@@ -38,6 +38,7 @@ new version adds coverage without changing the test.
 |---|---|---|
 | Kubernetes | v1.31.2 (k3s); kind v1.34–v1.37 via the `record` workflow | running_pod, running_pod_not_ready, queued_pod, unschedulable_pod, completed_pod, error_pod, crash_loop_pod, image_error_pod, several_pods, delete_pod, not_found, empty_namespace, invalid_submit |
 | Flux | v0.89.0 (fluxrm/flux-sched container) | running_job, held_job, dependent_job, released_job, completed_job, failed_job, timeout_job, canceled_job, several_jobs, not_found, no_jobs, invalid_submit |
+| Slurm | scenarios ready; recordings not yet committed | several_jobs, running_job, held_job, dependent_job, released_job, completed_job, failed_job, timeout_job, canceled_job, not_found, invalid_submit |
 
 The Kubernetes scenario names follow the hand-captured fixtures in ood_core's
 `spec/fixtures/output/k8s`, so each recording can check or replace one.
@@ -82,7 +83,8 @@ How replay matches calls:
 
 Things that differ between machines are stored as `{{placeholders}}` and
 listed in the header's `vars`. For Kubernetes those are `kubectl` and
-`kubeconfig`; for Flux, `flux`. Pass your test's values as keywords. Leaving one out is an
+`kubeconfig`; for Flux, `flux`; for Slurm, `user`, `group`, `home` and
+`account`, which stand in for whoever recorded it. Pass your test's values as keywords. Leaving one out is an
 error before anything runs.
 
 ### What a recording knows
@@ -123,6 +125,7 @@ Recording runs ood_core's adapter, so ood_core has to be loadable:
 ruby -I ../ood_core/lib exe/scheduler-recordings record kubernetes --kubeconfig ~/.kube/config
 ruby -I ../ood_core/lib exe/scheduler-recordings record kubernetes --only running_pod,error_pod
 ruby -I ../ood_core/lib exe/scheduler-recordings record flux            # from a shell inside `flux start`
+ruby -I ../ood_core/lib exe/scheduler-recordings record slurm --account PZS0000 --partition debug
 ```
 
 Recordings go to `recordings/<scheduler>/<version>/<scenario>.jsonl`
@@ -162,6 +165,40 @@ builds may differ. Record against your cluster, check the files for anything
 you don't want public (node names and cluster details are in the output),
 and send a pull request.
 
+#### Slurm on a shared cluster
+
+The Slurm recorder is built to run on a production cluster from a login
+node, as yourself, without getting in anyone's way:
+
+- **Small, self-limiting jobs.** Every job is named `ood-rec`, runs one task
+  in the partition and account you pass (`--partition` and `--account` are
+  required; use a debug partition), has a five minute time limit, writes no
+  output file, and works in `/tmp`. A full run submits 11 jobs; the
+  longest-lived is the timeout scenario at about a minute. If the recorder
+  dies, anything it left behind ends within five minutes.
+- **Cancels only its own jobs.** Cleanup cancels jobs that are yours and
+  named `ood-rec`, by job ID. It never runs `scancel -u`, and the recorder
+  refuses to run as root.
+- **Doesn't hammer the controller.** It polls every five seconds.
+- **Records only your jobs.** No scenario records `info_all`, whose `squeue`
+  has no user filter and would capture every user's jobs. `several_jobs`
+  lists jobs by owner, so it refuses to run while you have any other jobs in
+  `squeue`, including ones that finished in the last few minutes; leave it
+  out with `--only` if you're busy. `not_found` asks about a job ID above
+  Slurm's maximum, and checks it really doesn't exist, so it can't record
+  someone else's job.
+- **Writes you as placeholders.** Your user name, group, home directory and
+  account become `{{user}}`, `{{group}}`, `{{home}}` and `{{account}}`.
+
+Still in the recordings, for you to review before committing: node names,
+partition names, your numeric UID and GID (squeue columns, and "CANCELLED by
+UID" from sacct), job IDs and timestamps. For example:
+
+```sh
+grep -c "$(id -u)" recordings/slurm/*/*.jsonl        # where your numeric UID appears
+grep -c "$(hostname -s)" recordings/slurm/*/*.jsonl  # the login node's name, if anywhere
+```
+
 ## Writing scenarios
 
 ```ruby
@@ -186,7 +223,7 @@ OOD_CORE=../ood_core bundle exec rake test:ood_core # replays every recording th
 
 ## Known limits
 
-- **Kubernetes and Flux so far.** PBS Pro (OpenPBS in a container) is next.
+- **Kubernetes, Flux and Slurm so far.** PBS Pro (OpenPBS in a container) is next.
   Flux needs an ood_core with the flux adapter.
 - **ood_core's Kubernetes adapter can't submit in a plain Ruby process**
   on ood_core 0.31.1 and master as of October 2026: `batch.rb` uses `ERB` and
