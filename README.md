@@ -191,4 +191,6 @@ OOD_CORE=../ood_core bundle exec rake test:ood_core # replays every recording th
 - **ood_core's Kubernetes adapter can't submit in a plain Ruby process**
   on ood_core 0.31.1 and master as of October 2026: `batch.rb` uses `ERB` and
   `Array.wrap`, and `helper.rb` uses `Shellwords`, without requiring them.
-  Recording needs those fixed in the ood_core you record with.
+  Recording needs those fixed in the ood_core you record with. Replay
+  skips the two Kubernetes submit tests, naming the bug, until ood_core
+  requires `erb`.
