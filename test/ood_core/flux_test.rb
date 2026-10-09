@@ -14,13 +14,23 @@ require 'scheduler_recordings/backends/flux'
 
 begin
   require 'ood_core'
-  require 'ood_core/job/adapters/flux'
 rescue LoadError => e
   # Pointed at an ood_core on purpose (OOD_CORE, as CI does): a load failure
   # is a broken setup, not a reason to report 0 runs as a pass.
   raise if ENV['OOD_CORE']
 
   warn("skipping flux replay tests: #{e.message}")
+  return
+end
+
+begin
+  require 'ood_core/job/adapters/flux'
+rescue LoadError => e
+  # An ood_core from before the flux adapter is a fine thing to test against;
+  # anything else the adapter fails to load is a real error.
+  raise unless e.path == 'ood_core/job/adapters/flux'
+
+  warn('skipping flux replay tests: this ood_core has no flux adapter')
   return
 end
 
