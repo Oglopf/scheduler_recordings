@@ -30,7 +30,7 @@ module SchedulerRecordings
     attr_reader :header, :calls, :path
 
     def self.load(path)
-      lines = File.readlines(path, chomp: true).reject(&:empty?)
+      lines = File.readlines(path, chomp: true, encoding: 'UTF-8').reject(&:empty?)
       raise ArgumentError, "#{path} is empty" if lines.empty?
 
       header = JSON.parse(lines.first)
@@ -105,7 +105,7 @@ module SchedulerRecordings
     end
 
     def write(path)
-      File.open(path, 'w') do |file|
+      File.open(path, 'w', encoding: 'UTF-8') do |file|
         file.puts(JSON.generate(header))
         calls.each { |call| file.puts(JSON.generate(call.to_h)) }
       end
